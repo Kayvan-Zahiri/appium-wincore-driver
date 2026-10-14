@@ -11,7 +11,7 @@ import type {AppiumWincoreDriver} from '../driver';
 import type {Enum} from '../enums';
 import {ClickType, Key} from '../enums';
 import {convertStringToCondition} from '../powershell/converter';
-import {propertyCondition} from '../server/conditions';
+import {orCondition, propertyCondition} from '../server/conditions';
 import {conditionToDto} from '../server/converter-bridge';
 import type {RectResult} from '../server/protocol';
 import {sleep} from '../util';
@@ -62,9 +62,9 @@ type KeyAction = {
  * understands.
  */
 function coerceExecuteMethodArgs(script: string, args: any[]): any[] | null {
-  // `patternSetValue(element, value)` is the only handler taking two separate
-  // positional args instead of one options object.
-  if (script === 'windows: setValue' && args.length === 2) {
+  // `windows: setValue` and `windows: selectFromCombobox` also accept two separate
+  // positional args, `(element, value)`, instead of one options object.
+  if ((script === 'windows: setValue' || script === 'windows: selectFromCombobox') && args.length === 2) {
     const [element, value] = args;
     if (element && typeof element === 'object' && W3C_ELEMENT_KEY in element) {
       return [{elementId: element[W3C_ELEMENT_KEY], value}];
@@ -420,6 +420,142 @@ export async function patternRemoveFromSelection(this: AppiumWincoreDriver, elem
  */
 export async function patternSelect(this: AppiumWincoreDriver, element: Element): Promise<void> {
   await this.sendCommand('selectElement', {elementId: element[W3C_ELEMENT_KEY]});
+}
+
+// Control types a dropdown / list / tree exposes its entries as. The value is matched
+// against these first so the combo's own edit or selection-box text (which often
+// carries the currently selected value) is never picked over the real entry.
+const ITEM_CONTROL_TYPES = ['ListItem', 'DataItem', 'TreeItem', 'MenuItem'];
+const ITEM_CONDITION = orCondition(...ITEM_CONTROL_TYPES.map((type) => propertyCondition('ControlType', type)));
+/** How long to wait for the opened popup to report its entries. */
+const SELECT_FROM_COMBOBOX_OPEN_TIMEOUT_MS = 1000;
+
+async function findItemsNamed(this: AppiumWincoreDriver, containerId: string, value: string): Promise<string[]> {
+  const matches = ((await this.sendCommand('findElements', {
+    scope: 'descendants',
+    condition: propertyCondition('Name', value),
+    contextElementId: containerId,
+  })) ?? []) as string[];
+
+  const items: string[] = [];
+  const others: string[] = [];
+  for (const id of matches) {
+    let controlType: unknown;
+    try {
+      controlType = await this.sendCommand('getProperty', {elementId: id, property: 'ControlType'});
+    } catch {
+      // Unreadable control type: still a candidate, after the real entries.
+    }
+    (ITEM_CONTROL_TYPES.includes(String(controlType)) ? items : others).push(id);
+  }
+  return [...items, ...others];
+}
+
+async function hasItems(this: AppiumWincoreDriver, containerId: string): Promise<boolean> {
+  const items = (await this.sendCommand('findElements', {
+    scope: 'descendants',
+    condition: ITEM_CONDITION,
+    contextElementId: containerId,
+  })) as string[] | null;
+  return (items?.length ?? 0) > 0;
+}
+
+// The container's own lookup of the entry (findItemInContainer), or undefined when it
+// finds none or has none: a tree provider that does not implement it answers
+// PatternNotSupported, and the caller then searches the descendants.
+async function findItemInContainer(
+  this: AppiumWincoreDriver,
+  containerId: string,
+  value: string,
+): Promise<string | undefined> {
+  try {
+    return ((await this.sendCommand('findItemInContainer', {elementId: containerId, name: value})) ?? undefined) as
+      | string
+      | undefined;
+  } catch (err: any) {
+    if (!/PatternNotSupported/.test(String(err?.message ?? err))) {
+      throw err;
+    }
+    this.log.debug(`[selectFromCombobox] '${containerId}' cannot look entries up itself, searching its descendants.`);
+    return undefined;
+  }
+}
+
+async function openContainer(this: AppiumWincoreDriver, containerId: string): Promise<void> {
+  if ((await isExpanded.call(this, containerId)) === true) {
+    return;
+  }
+  try {
+    await patternExpand.call(this, {[W3C_ELEMENT_KEY]: containerId} as Element);
+  } catch (err: any) {
+    // A list box or tree is already open: nothing to expand, search it as it is.
+    if (!/PatternNotSupported/.test(String(err?.message ?? err))) {
+      throw err;
+    }
+    this.log.debug(`[selectFromCombobox] '${containerId}' cannot be expanded, searching it as is.`);
+  }
+}
+
+async function closeContainer(this: AppiumWincoreDriver, containerId: string): Promise<void> {
+  if ((await isExpanded.call(this, containerId)) !== true) {
+    return;
+  }
+  try {
+    await patternCollapse.call(this, {[W3C_ELEMENT_KEY]: containerId} as Element);
+  } catch (err) {
+    this.log.debug(
+      `[selectFromCombobox] could not close '${containerId}': ${err instanceof Error ? err.message : err}`,
+    );
+  }
+}
+
+/**
+ * `windows: selectFromCombobox` handler: opens a combo box (or any container), finds the
+ * entry whose Name is exactly `value`, and selects it. The popup is closed again
+ * afterwards if it is still open.
+ *
+ * The container is asked for the entry first: UIA ItemContainerPattern for a virtualized
+ * list (WPF), or the owning tree provider's FindItemInContainer. Both also reach entries
+ * not on screen. Otherwise the container's descendants are searched: WinForms, Win32 and
+ * MSAA lists expose every entry once open.
+ * @param args.elementId - The combo box or container element.
+ * @param args.value - The exact text of the entry to select.
+ * @returns Resolves once the entry has been selected.
+ * @throws NoSuchElementError when no entry with that text exists.
+ */
+export async function selectFromCombobox(
+  this: AppiumWincoreDriver,
+  args: {elementId: string; value: string},
+): Promise<void> {
+  const {elementId: containerId, value} = args ?? ({} as any);
+  if (!containerId) {
+    throw new errors.InvalidArgumentError("'elementId' of the combo box or container is required.");
+  }
+  if (typeof value !== 'string') {
+    throw new errors.InvalidArgumentError("'value' must be the exact text of the entry to select.");
+  }
+
+  await openContainer.call(this, containerId);
+
+  let match = await findItemInContainer.call(this, containerId, value);
+
+  // The popup may still be animating open: wait until it reports entries.
+  const deadline = Date.now() + SELECT_FROM_COMBOBOX_OPEN_TIMEOUT_MS;
+  while (!match) {
+    [match] = await findItemsNamed.call(this, containerId, value);
+    if (match || Date.now() >= deadline || (await hasItems.call(this, containerId))) {
+      break;
+    }
+    await sleep(100);
+  }
+
+  if (!match) {
+    await closeContainer.call(this, containerId);
+    throw new errors.NoSuchElementError(`No entry with the text '${value}' was found in the list.`);
+  }
+
+  await patternSelect.call(this, {[W3C_ELEMENT_KEY]: match} as Element);
+  await closeContainer.call(this, containerId);
 }
 
 /**
