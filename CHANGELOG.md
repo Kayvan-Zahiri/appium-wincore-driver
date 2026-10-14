@@ -1,3 +1,13 @@
+## [3.2.0](https://github.com/appium/appium-wincore-driver/compare/v3.1.2...v3.2.0) (2026-10-14)
+
+### Features
+
+* add windows: selectFromCombobox ([#105](https://github.com/appium/appium-wincore-driver/issues/105)) ([4868aa0](https://github.com/appium/appium-wincore-driver/commit/4868aa0f148cbd395767d16dc54bdb89fe54072c))
+
+### Code Refactoring
+
+* remove all references to specific plugins ([8f89602](https://github.com/appium/appium-wincore-driver/commit/8f89602b9ba38f0e787661b3860bf218cf697c88))
+
 ## [3.1.2](https://github.com/verisoft-ai/appium-wincore-driver/compare/v3.1.1...v3.1.2) (2026-10-07)
 
 ### Miscellaneous Chores
