@@ -2,9 +2,6 @@ import type {AppiumWincoreDriver} from '../driver';
 
 const ISO_8061_FORMAT = 'yyyy-MM-ddTHH:mm:sszzz';
 
-/** Default `mobile: getDeviceTime` format, in moment.js notation, as in the other Appium drivers. */
-export const MOMENT_DEFAULT_FORMAT = 'YYYY-MM-DDTHH:mm:ssZ';
-
 /**
  * moment.js tokens and their .NET custom date/time equivalents, longest first so that the
  * tokenizer always takes the longest match (`YYYY` before `YY`, `SSS` before `S`).
@@ -39,7 +36,8 @@ const MOMENT_TO_DOTNET_TOKENS: [string, string][] = [
 
 /**
  * Translates a moment.js format string (the notation Appium clients document for
- * `getDeviceTime`) into a .NET custom date/time format string.
+ * `getDeviceTime`) into a .NET custom date/time format string. Used by `windows: getDeviceTime`
+ * when called with `formatSyntax: 'moment'`.
  *
  * Supported tokens: `YYYY YY MMMM MMM MM M DD D dddd ddd HH H hh h mm m ss s SSS SS S A Z ZZ`
  * (`ZZ` is written with a colon, as `Z`).
@@ -95,15 +93,4 @@ export async function getDeviceTime(this: AppiumWincoreDriver, _sessionId?: stri
   // Use the C# server to get formatted date/time
   const script = `(Get-Date).ToString('${fmt.replace(/'/g, "''")}')`;
   return (await this.sendCommand('executePowerShellScript', {script})) as string;
-}
-
-/**
- * `mobile: getDeviceTime` execute-method handler: the standard Appium name that clients send
- * for `driver.get_device_time()` / `getDeviceTime()`. Unlike `windows: getDeviceTime`, the
- * `format` argument is in moment.js notation, as in the other Appium drivers.
- * @param format - A moment.js format string; defaults to `YYYY-MM-DDTHH:mm:ssZ`.
- * @returns The formatted date/time string.
- */
-export async function mobileGetDeviceTime(this: AppiumWincoreDriver, format?: string): Promise<string> {
-  return await this.getDeviceTime(undefined, momentToDotNetFormat(format ?? MOMENT_DEFAULT_FORMAT));
 }

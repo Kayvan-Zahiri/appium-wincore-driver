@@ -3,7 +3,7 @@
  */
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 
-import {getDeviceTime, mobileGetDeviceTime, momentToDotNetFormat} from '../../lib/commands/device';
+import {getDeviceTime, momentToDotNetFormat} from '../../lib/commands/device';
 import {createMockDriver} from '../fixtures/driver';
 
 describe('getDeviceTime', () => {
@@ -61,28 +61,5 @@ describe('momentToDotNetFormat', () => {
   it('keeps bracketed text and quotes as literals', () => {
     expect(momentToDotNetFormat('[Today is] dddd')).toBe("'Today is 'dddd");
     expect(momentToDotNetFormat("[it's] YYYY")).toBe("'it'\\''s 'yyyy");
-  });
-});
-
-describe('mobileGetDeviceTime', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('formats with the moment.js default when no format is given', async () => {
-    const driver = createMockDriver() as any;
-    driver.getDeviceTime = getDeviceTime;
-    driver.sendCommand.mockResolvedValue('2026-02-25T10:30:00+00:00');
-    const result = await mobileGetDeviceTime.call(driver);
-    expect(result).toBe('2026-02-25T10:30:00+00:00');
-    const [, params] = driver.sendCommand.mock.calls[0];
-    expect(params.script).toBe("(Get-Date).ToString('yyyy''-''MM''-''dd''T''HH'':''mm'':''sszzz')");
-  });
-
-  it('translates a moment.js format before formatting', async () => {
-    const driver = createMockDriver() as any;
-    driver.getDeviceTime = getDeviceTime;
-    driver.sendCommand.mockResolvedValue('2026-02-25');
-    await mobileGetDeviceTime.call(driver, 'YYYY-MM-DD');
-    const [, params] = driver.sendCommand.mock.calls[0];
-    expect(params.script).toBe("(Get-Date).ToString('yyyy''-''MM''-''dd')");
   });
 });
