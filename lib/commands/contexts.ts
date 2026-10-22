@@ -185,7 +185,7 @@ type CDPListResponse = CDPListResponseEntry[];
 export async function getWebViewDetails(this: AppiumWincoreDriver, waitForWebviewMs?: number): Promise<WebViewDetails> {
   if (!this.caps.webviewEnabled) {
     throw new errors.InvalidArgumentError(
-      'WebView support is not enabled. Please set the "enableWebView" capability to true and try again.',
+      'WebView support is not enabled. Please set the "appium:webviewEnabled" capability to true and try again.',
     );
   }
 
@@ -204,7 +204,7 @@ export async function getWebViewDetails(this: AppiumWincoreDriver, waitForWebvie
     this.caps.webviewDevtoolsPort == null
   ) {
     throw new errors.InvalidArgumentError(
-      `Capability "webviewDevtoolsPort" must be set when using "none", "root", or "appTopLevelWindow" with "enableWebView"`,
+      `Capability "appium:webviewDevtoolsPort" must be set when using "none", "root", or "appTopLevelWindow" with "appium:webviewEnabled"`,
     );
   }
 
