@@ -35,6 +35,8 @@ import type {UploadOptions} from './screen-recorder';
 import {DEFAULT_EXT, ScreenRecorder, uploadRecordedMedia} from './screen-recorder';
 
 const PLATFORM_COMMAND_PREFIX = 'windows:';
+/** Standard `mobile:` execute methods that are dispatched through the `executeMethodMap`. */
+const MOBILE_EXECUTE_METHODS = new Set(['mobile: getDeviceTime']);
 
 const ContentType = Object.freeze({
   PLAINTEXT: 'plaintext',
@@ -99,7 +101,7 @@ function coerceExecuteMethodArgs(script: string, args: any[]): any[] | null {
  * @returns The result of the dispatched command.
  */
 export async function execute(this: AppiumWincoreDriver, script: string, args: any[]) {
-  if (script.startsWith(PLATFORM_COMMAND_PREFIX)) {
+  if (script.startsWith(PLATFORM_COMMAND_PREFIX) || MOBILE_EXECUTE_METHODS.has(script)) {
     const executeMethodArgs = coerceExecuteMethodArgs(script, args);
     if (executeMethodArgs === null) {
       throw new errors.InvalidArgumentError(
@@ -1397,7 +1399,8 @@ export async function executeClickAndDrag(
 
 /**
  * `windows: getDeviceTime` execute-method handler; delegates to {@link getDeviceTime}.
- * @param args.format - A .NET custom date/time format string; defaults to ISO 8601.
+ * @param args.format - A .NET custom date/time format string (e.g. `yyyy-MM-dd`), not moment.js
+ * notation; defaults to ISO 8601. Use `mobile: getDeviceTime` for moment.js notation.
  * @returns The formatted date/time string.
  */
 export async function windowsGetDeviceTime(this: AppiumWincoreDriver, args?: {format?: string}): Promise<string> {
