@@ -122,6 +122,11 @@ describe('getWebViewDetails', () => {
     await expect(contexts.getWebViewDetails.call(driver)).rejects.toThrow('WebView support is not enabled');
   });
 
+  it('names the real capability in the error message', async () => {
+    const driver = createMockDriver({webviewEnabled: false});
+    await expect(contexts.getWebViewDetails.call(driver)).rejects.toThrow('"appium:webviewEnabled"');
+  });
+
   it('throws when app is none and webviewDevtoolsPort is not set', async () => {
     const driver = createMockDriver({app: 'none', webviewDevtoolsPort: undefined});
     driver.webviewDevtoolsPort = null;
