@@ -355,18 +355,61 @@ public static class PatternCommands
 
     public static object? MoveWindow(SessionState state, IUIAutomationElement element, JsonElement parameters)
     {
-        var x = parameters.GetProperty("x").GetDouble();
-        var y = parameters.GetProperty("y").GetDouble();
+        var x = WindowRect.ReadRequired(parameters, "x", WindowRect.MinCoordinate);
+        var y = WindowRect.ReadRequired(parameters, "y", WindowRect.MinCoordinate);
         Require<IUIAutomationTransformPattern>(element, UIA.TransformPatternId, "TransformPattern").Move(x, y);
         return null;
     }
 
     public static object? ResizeWindow(SessionState state, IUIAutomationElement element, JsonElement parameters)
     {
-        var width = parameters.GetProperty("width").GetDouble();
-        var height = parameters.GetProperty("height").GetDouble();
+        var width = WindowRect.ReadRequired(parameters, "width", WindowRect.MinSize);
+        var height = WindowRect.ReadRequired(parameters, "height", WindowRect.MinSize);
         Require<IUIAutomationTransformPattern>(element, UIA.TransformPatternId, "TransformPattern").Resize(width, height);
         return null;
+    }
+
+    /// <summary>
+    /// W3C Set Window Rect in one call: validates <c>x</c>, <c>y</c>, <c>width</c> and
+    /// <c>height</c> (each optional; missing or <c>null</c> keeps the current value) before
+    /// touching the window, restores it to the normal state (TransformPattern.Move/Resize
+    /// fail on a maximized or minimized window), fills omitted values from its bounds after
+    /// the restore, resizes, then moves (the order W3C lists them), and returns the new rect.
+    /// </summary>
+    public static object? SetWindowRect(SessionState state, IUIAutomationElement element, JsonElement parameters)
+    {
+        var x = WindowRect.ReadOptional(parameters, "x", WindowRect.MinCoordinate);
+        var y = WindowRect.ReadOptional(parameters, "y", WindowRect.MinCoordinate);
+        var width = WindowRect.ReadOptional(parameters, "width", WindowRect.MinSize);
+        var height = WindowRect.ReadOptional(parameters, "height", WindowRect.MinSize);
+
+        Require<IUIAutomationWindowPattern>(element, UIA.WindowPatternId, "WindowPattern")
+            .SetWindowVisualState(WindowVisualState.Normal);
+
+        var hasSize = width != null || height != null;
+        var hasPosition = x != null || y != null;
+        if (hasSize || hasPosition)
+        {
+            var current = element.CurrentBoundingRectangle;
+            var transform = Require<IUIAutomationTransformPattern>(element, UIA.TransformPatternId, "TransformPattern");
+            if (hasSize)
+            {
+                transform.Resize(width ?? current.right - current.left, height ?? current.bottom - current.top);
+            }
+            if (hasPosition)
+            {
+                transform.Move(x ?? current.left, y ?? current.top);
+            }
+        }
+
+        var rect = element.CurrentBoundingRectangle;
+        return new
+        {
+            x = (double)rect.left,
+            y = (double)rect.top,
+            width = (double)(rect.right - rect.left),
+            height = (double)(rect.bottom - rect.top),
+        };
     }
 
     private static T Require<T>(IUIAutomationElement element, int patternId, string patternName) where T : class
