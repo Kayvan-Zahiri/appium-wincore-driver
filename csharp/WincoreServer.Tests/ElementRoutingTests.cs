@@ -18,7 +18,7 @@ public class ElementRoutingTests
     private static readonly HashSet<string> ExpectedUiaOnly = new(StringComparer.OrdinalIgnoreCase)
     {
         "maximizeWindow", "minimizeWindow", "restoreWindow", "closeWindow",
-        "moveWindow", "resizeWindow", "setRootElementFromElementId",
+        "moveWindow", "resizeWindow", "setWindowRect", "setRootElementFromElementId",
     };
 
     private readonly CommandDispatcher _dispatcher = new();

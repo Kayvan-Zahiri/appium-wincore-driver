@@ -141,6 +141,7 @@ public class CommandDispatcher
         AddElement("closeWindow", PatternCommands.CloseWindow, provider: null);
         AddElement("moveWindow", PatternCommands.MoveWindow, provider: null);
         AddElement("resizeWindow", PatternCommands.ResizeWindow, provider: null);
+        AddElement("setWindowRect", PatternCommands.SetWindowRect, provider: null);
         AddElement("setRootElementFromElementId", SessionCommands.SetRootElementFromElementId, provider: null);
     }
 
